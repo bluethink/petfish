@@ -4,6 +4,8 @@ const Color = require('../models/color');
 const Fish = require('../models/fish');
 const { arrayToGraphQL } = require('graphql-compose-mongoose');
 const { GraphQLJSONObject } = require('graphql-compose');
+const validatorObj = require('../helper/validator');
+const moment = require('moment');
 
 const { 
     GraphQLObjectType, GraphQLString, 
@@ -31,10 +33,23 @@ const FishType = new GraphQLObjectType({
         id: { type: GraphQLID  },
         species: { type: GraphQLString }, 
         finscount: { type: GraphQLInt }, 
+        status: { type: GraphQLString }, 
         color: {
             type: ColorType,
             resolve(parent,args){
                 return Color.findById(parent.colorID);
+            }
+        },
+        created_at: { 
+            type: GraphQLString,
+            resolve(parent,args){
+                return moment(parent.created_at).format("DD/MM/YYYY h:mm:ss");
+            }
+        },
+        updated_at: { 
+            type: GraphQLString,
+            resolve(parent,args){
+                return moment(parent.created_at).format("DD/MM/YYYY h:mm:ss");
             }
         },
     })
@@ -45,7 +60,7 @@ const AquariumType = new GraphQLObjectType({
     fields: () => ({
         id: { type: GraphQLID  },
         glasstype: { type: GraphQLString }, 
-        size: { type: GraphQLString }, 
+        size: { type: GraphQLInt }, 
         sizeunit:  { type: GraphQLString },
         shape:  { type: GraphQLString },
         fish: {
@@ -59,8 +74,18 @@ const AquariumType = new GraphQLObjectType({
             }
             
         },
-        created_at: { type: GraphQLString },
-        updated_at: { type: GraphQLString },
+        created_at: { 
+            type: GraphQLString,
+            resolve(parent,args){
+                return moment(parent.created_at).format("DD/MM/YYYY h:mm:ss");
+            }
+        },
+        updated_at: { 
+            type: GraphQLString,
+            resolve(parent,args){
+                return moment(parent.created_at).format("DD/MM/YYYY h:mm:ss");
+            }
+        },
     })
 });
 
@@ -122,45 +147,69 @@ const Mutation = new GraphQLObjectType({
                 colorID: { type: new GraphQLNonNull(GraphQLID)}
             },
             resolve: async(parent,args) => {
-                let fish = new Fish({
-                    species:args.species,
-                    finscount:args.finscount,
-                    colorID:args.colorID
-                });
-
-                const newfish = await fish.save();
-                if(!newfish) {
-                    throw new Error('Error');
+                // Call Fish validator to validate Fish Data
+                var validationResObj = validatorObj.validateFish(args);
+                if(validationResObj.status){
+                    throw new Error(validationResObj.msg);
+                }else{
+                    let fish = new Fish({
+                        species:args.species,
+                        finscount:args.finscount,
+                        colorID:args.colorID
+                    });
+    
+                    const newfish = await fish.save();
+                    if(!newfish) {
+                        throw new Error('Error');
+                    }
+                    return newfish;
                 }
-                return newfish;
             }
         },
+
         updateFish:{
             type:FishType,
             args:{
-                species: { type: GraphQLString},
-                finscount: { type: GraphQLInt},
+                data: { type : GraphQLJSONObject},
                 _id: { type: new GraphQLNonNull(GraphQLID)}
             },
             resolve: async(parent,args) => {
                 let updateFish = {};
+                // Call Fish validator to validate Fish Data
+                var validationResObj = validatorObj.validateFish(args.data);
 
-                if(args.species) {
-                    updateFish.species = args.species;
-                }
+                if(validationResObj.status){
+                    throw new Error(validationResObj.msg);
+                }else{
+                    if(typeof args.data.status != 'undefined'){
+                        updateFish.status = args.data.status;
+                    }
+    
+                    if(typeof args.data.finscount != 'undefined'){
+                        updateFish.finscount = args.data.finscount;
+                    }
+    
+                    if(typeof args.data.species != 'undefined'){
+                        updateFish.species = args.data.species;
+                    }
 
-                if(args.finscount) {
-                    updateFish.finscount = args.finscount;
+                    if(typeof args.data.colorID != 'undefined'){
+                        updateFish.colorID = args.data.colorID;
+                    }
+
+                    updateFish.updated_at = new Date();
+
+                    // Find FIsh in database and update the object values
+                    const uFish= await Fish.findByIdAndUpdate(args._id, updateFish, {new: true});
+
+                    if(!uFish) {
+                        throw new Error('Error');
+                    }
+                    return uFish;
                 }
-               
-                const uFish= await Fish.findByIdAndUpdate(args._id, updateFish, {new: true});
-                console.log(uFish);
-                if(!uFish) {
-                    throw new Error('Error');
-                }
-                return uFish;
             },
         },
+
         addColor: {
             type: ColorType,
             args: {
@@ -174,29 +223,37 @@ const Mutation = new GraphQLObjectType({
                 return color.save();
             }
         },
+
         addAquarium:{
             type:AquariumType,
             args:{
                 glasstype: { type: new GraphQLNonNull(GraphQLString)},
-                size: { type: new GraphQLNonNull(GraphQLString)},
+                size: { type: new GraphQLNonNull(GraphQLInt)},
                 sizeunit : { type: new GraphQLNonNull(GraphQLString)},
                 shape : { type: new GraphQLNonNull(GraphQLString)},
                 fishes: { type: new GraphQLList(GraphQLString) }
             },
             resolve: async(parent,args) => {
-                let aquarium = new Aquarium({
-                    glasstype:args.glasstype,
-                    size:args.size,
-                    sizeunit:args.sizeunit,
-                    shape:args.shape,
-                    fishes:args.fishes
-                });
+                // Call Aquarium validator to validate post data
+                var validationResObj = await validatorObj.validateAquarium(args);
 
-                const newaquarium = await aquarium.save();
-                if(!newaquarium) {
-                    throw new Error('Error');
+                if(validationResObj.status){
+                    throw new Error(validationResObj.msg);
+                }else{
+                    let aquarium = new Aquarium({
+                        glasstype:args.glasstype,
+                        size:args.size,
+                        sizeunit:args.sizeunit,
+                        shape:args.shape,
+                        fishes:args.fishes
+                    });
+    
+                    const newaquarium = await aquarium.save();
+                    if(!newaquarium) {
+                        throw new Error('Error');
+                    }
+                    return newaquarium;
                 }
-                return newaquarium;
             }
         },
     }
