@@ -63,6 +63,7 @@ const AquariumType = new GraphQLObjectType({
         size: { type: GraphQLInt }, 
         sizeunit:  { type: GraphQLString },
         shape:  { type: GraphQLString },
+        status:  { type: GraphQLString },
         fish: {
             type: new GraphQLList(FishType),
             resolve(parent,args){
@@ -253,6 +254,56 @@ const Mutation = new GraphQLObjectType({
                         throw new Error('Error');
                     }
                     return newaquarium;
+                }
+            }
+        },
+
+        updateAquarium:{
+            type:AquariumType,
+            args:{
+                data: { type : GraphQLJSONObject},
+                _id: { type: new GraphQLNonNull(GraphQLID)},
+            },
+            resolve: async(parent,args) => {
+                let updateAquarium = {};
+                // Call Aquarium validator to validate post data
+                var validationResObj = await validatorObj.validateAquarium(args.data);
+
+                if(validationResObj.status){
+                    throw new Error(validationResObj.msg);
+                }else{
+                    if(typeof args.data.status != 'undefined'){
+                        updateAquarium.status = args.data.status;
+                    }
+    
+                    if(typeof args.data.glasstype != 'undefined'){
+                        updateAquarium.finscount = args.data.glasstype;
+                    }
+    
+                    if(typeof args.data.size != 'undefined'){
+                        updateAquarium.size = args.data.size;
+                    }
+
+                    if(typeof args.data.sizeunit != 'undefined'){
+                        updateAquarium.sizeunit = args.data.sizeunit;
+                    }
+
+                    if(typeof args.data.shape != 'undefined'){
+                        updateAquarium.shape = args.data.shape;
+                    }
+
+                    if(typeof args.data.fishes != 'undefined'){
+                        updateAquarium.fishes = args.data.fishes;
+                    }
+
+                    updateAquarium.updated_at = new Date();
+
+                    const uAquarium = await Aquarium.findByIdAndUpdate(args._id, updateAquarium, {new: true});
+
+                    if(!uAquarium) {
+                        throw new Error('Error');
+                    }
+                    return uAquarium;
                 }
             }
         },

@@ -88,5 +88,15 @@ Fetch Aquariums
   }
 }
 
+Update Aquarium
+mutation{
+  updateAquarium(_id:"", data:{status:true}){
+    glasstype,size,sizeunit,shape,status,fish{
+      id,species,finscount,color{
+        id,name
+      }
+    }
+  }
+}
 
 
